@@ -34,8 +34,13 @@ tar -C "$WORK" -xzf "$(fetch "$OPENSSL_URL" "$OPENSSL_SHA256" "openssl-$OPENSSL_
   cd "$WORK/openssl-$OPENSSL_VERSION"
   # CC already carries -arch; OpenSSL's darwin targets add their own too,
   # so hand it a plain clang + the flags it doesn't set.
-  CC=clang ./Configure "$ossl_target" no-shared no-tests no-docs no-apps \
-    --prefix="$DEPS" --libdir=lib \
+  # --openssldir=/etc/ssl: trust store = macOS's own /etc/ssl/cert.pem
+  # (kept up to date by the OS). Without it OPENSSLDIR is baked in as this
+  # build directory and no public CA verifies at all.
+  # no-autoload-config: never read an openssl.cnf — these binaries run as
+  # root, and macOS' /etc/ssl/openssl.cnf is LibreSSL's anyway.
+  CC=clang ./Configure "$ossl_target" no-shared no-tests no-docs no-apps no-autoload-config \
+    --prefix="$DEPS" --openssldir=/etc/ssl --libdir=lib \
     -isysroot "$SDK" -mmacosx-version-min="$MACOSX_DEPLOYMENT_TARGET" >/dev/null
   make -j"$JOBS" >/dev/null
   make install_sw >/dev/null

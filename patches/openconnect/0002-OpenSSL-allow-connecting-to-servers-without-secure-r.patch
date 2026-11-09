@@ -1,0 +1,42 @@
+From cae5875f457d0ffba51a6fdbfe0ac371b6b768ce Mon Sep 17 00:00:00 2001
+From: Azizbek Atajanov <33376229+azizbekatajanov@users.noreply.github.com>
+Date: Mon, 9 Nov 2026 15:45:50 +0500
+Subject: [PATCH] OpenSSL: allow connecting to servers without secure
+ renegotiation
+
+OpenSSL 3.0 made SSL_OP_LEGACY_SERVER_CONNECT opt-in, so connecting to a
+server that doesn't support RFC 5746 fails with "unsafe legacy
+renegotiation disabled" before anything else happens. Some
+GlobalProtect gateways (older PAN-OS) are such servers. OpenSSL 1.1 and
+GnuTLS builds of openconnect connect to them fine.
+
+Set SSL_OP_LEGACY_SERVER_CONNECT unconditionally. Unsafe renegotiation
+itself stays disabled, and the cipher list and security level are
+unchanged; --allow-insecure-crypto is no longer needed just for this.
+---
+ openssl.c | 9 +++++++++
+ 1 file changed, 9 insertions(+)
+
+diff --git a/openssl.c b/openssl.c
+index 761cb03..978e29e 100644
+--- a/openssl.c
++++ b/openssl.c
+@@ -1917,6 +1917,15 @@ int openconnect_open_https(struct openconnect_info *vpninfo)
+ 		SSL_CTX_set_options(vpninfo->https_ctx, SSL_OP_NO_TICKET);
+ #endif
+ 
++		/* OpenSSL 3.0 refuses to even connect to servers that don't
++		 * support RFC 5746 secure renegotiation, which some GlobalProtect
++		 * gateways (older PAN-OS) still don't. OpenSSL 1.1 and GnuTLS
++		 * both allow the initial connection. SSL_OP_LEGACY_SERVER_CONNECT
++		 * restores just that: renegotiating with such a server remains
++		 * refused (SSL_OP_ALLOW_UNSAFE_LEGACY_RENEGOTIATION is not set),
++		 * and ciphers/security level are untouched. */
++		SSL_CTX_set_options(vpninfo->https_ctx, SSL_OP_LEGACY_SERVER_CONNECT);
++
+ #if OPENSSL_VERSION_NUMBER >= 0x010100000L
+ 		if (vpninfo->allow_insecure_crypto) {
+ 			/* OpenSSL versions after 1.1.0 added the notion of a "security level"
+-- 
+2.54.0 (Apple Git-157)
+

@@ -16,6 +16,7 @@ Every input is pinned by version and sha256 in [`versions.env`](versions.env).
 - `0001-GlobalProtect-send-empty-passwd-alongside-alt-secret.patch`: [openconnect!656](https://gitlab.com/openconnect/openconnect/-/merge_requests/656) (fixes [#859](https://gitlab.com/openconnect/openconnect/-/issues/859)). When logging in with a SAML cookie (`--usergroup=portal:prelogin-cookie`), some gateways reject the request unless an empty `passwd` field is sent alongside the cookie, and fail it with `512 auth-failed-password-empty`. Ingress' SAML login depends on this.
 
   **When upstream merges it:** bump `OPENCONNECT_*` to the release that contains it, delete the patch, bump `INGRESS_REV`.
+- `0002-OpenSSL-allow-connecting-to-servers-without-secure-r.patch`: OpenSSL 3 refuses to connect to servers that don't support RFC 5746 secure renegotiation ("unsafe legacy renegotiation disabled"), and some GlobalProtect gateways (older PAN-OS) are such servers. The patch sets `SSL_OP_LEGACY_SERVER_CONNECT`, as OpenSSL 1.1 and GnuTLS builds behave. Unsafe renegotiation itself stays refused, and ciphers and the security level are unchanged. Without it, the only way in was `--allow-insecure-crypto`, which also enables 3DES/RC4 and security level 0.
 
 ## Artifacts
 
