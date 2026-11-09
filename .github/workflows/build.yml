@@ -15,7 +15,7 @@ permissions:
 
 jobs:
   macos:
-    runs-on: macos-14 # Apple Silicon; x86_64 is cross-compiled
+    runs-on: macos-15 # Apple Silicon; x86_64 is cross-compiled
     strategy:
       matrix:
         arch: [arm64, x86_64]
