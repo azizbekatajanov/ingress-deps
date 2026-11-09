@@ -1,0 +1,87 @@
+name: Build
+
+# Every push/PR builds and tests everything; pushing a tag rN (N =
+# INGRESS_REV in versions.env) also publishes the GitHub release that
+# Ingress' compiled-in manifest points at.
+on:
+  push:
+    branches: [main]
+    tags: ["r*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  macos:
+    runs-on: macos-14 # Apple Silicon; x86_64 is cross-compiled
+    strategy:
+      matrix:
+        arch: [arm64, x86_64]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build tools
+        run: brew install automake autoconf libtool pkg-config
+      - name: Build
+        run: ./scripts/build-macos.sh ${{ matrix.arch }}
+      - name: Smoke test
+        run: |
+          set -e
+          goarch=$([ "${{ matrix.arch }}" = arm64 ] && echo arm64 || echo amd64)
+          run=""; [ "${{ matrix.arch }}" = x86_64 ] && run="arch -x86_64"
+          for t in openconnect openfortivpn; do
+            mkdir -p "smoke/$t" && tar -C "smoke/$t" -xzf dist/$t-*-darwin-$goarch.tar.gz
+            $run "smoke/$t/bin/$t" --version
+          done
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist-darwin-${{ matrix.arch }}
+          path: dist/*.tar.gz
+          if-no-files-found: error
+
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build (static, Alpine/musl)
+        run: ./scripts/build-linux-docker.sh amd64
+      - name: Test against strict fake GlobalProtect server
+        run: ./tests/run-fake-gp-docker.sh amd64
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist-linux-amd64
+          path: dist/*.tar.gz
+          if-no-files-found: error
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/r')
+    needs: [macos, linux]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: dist-*
+          merge-multiple: true
+          path: dist
+      - name: Check tag matches versions.env
+        run: |
+          . versions.env
+          [ "$GITHUB_REF_NAME" = "r$INGRESS_REV" ] || { echo "tag $GITHUB_REF_NAME != r$INGRESS_REV"; exit 1; }
+      - name: Checksums and manifest snippet
+        run: |
+          (cd dist && sha256sum *.tar.gz > SHA256SUMS)
+          ./scripts/gen-manifest.sh dist > dist/ingress-manifest.go.txt
+          cat dist/SHA256SUMS dist/ingress-manifest.go.txt
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          . versions.env
+          {
+            echo "openconnect $OPENCONNECT_VERSION (+ patches in patches/openconnect) and openfortivpn $OPENFORTIVPN_VERSION, build ingress.$INGRESS_REV."
+            echo
+            echo "Paste \`ingress-manifest.go.txt\` into Ingress' \`components_manifest.go\`. Sources and licenses: see SOURCES.txt and LICENSES/ inside each archive."
+          } > notes.md
+          gh release create "$GITHUB_REF_NAME" dist/* --title "$GITHUB_REF_NAME" --notes-file notes.md
