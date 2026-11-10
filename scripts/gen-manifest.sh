@@ -5,10 +5,11 @@
 . "$(dirname "$0")/lib.sh"
 dir=${1:-$DIST}
 tag=r$INGRESS_REV
-for tool in openfortivpn openconnect; do
+for tool in openfortivpn openconnect sstpc; do
   case $tool in
     openfortivpn) ver=$(ofv_version) ;;
     openconnect)  ver=$(oc_version) ;;
+    sstpc)        ver=$(sstpc_version) ;;
   esac
   printf '\t"%s": {\n' "$tool"
   for plat in darwin-arm64 darwin-amd64 linux-amd64; do

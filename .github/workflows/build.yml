@@ -30,7 +30,7 @@ jobs:
           set -e
           goarch=$([ "${{ matrix.arch }}" = arm64 ] && echo arm64 || echo amd64)
           run=""; [ "${{ matrix.arch }}" = x86_64 ] && run="arch -x86_64"
-          for t in openconnect openfortivpn; do
+          for t in openconnect openfortivpn sstpc; do
             mkdir -p "smoke/$t" && tar -C "smoke/$t" -xzf dist/$t-*-darwin-$goarch.tar.gz
             $run "smoke/$t/bin/$t" --version
           done
