@@ -15,12 +15,28 @@ esac
 
 log "apk packages"
 apk add --no-cache bash build-base autoconf automake libtool pkgconf linux-headers curl patch file \
-  tar openssl-dev openssl-libs-static libxml2-dev libxml2-static zlib-dev zlib-static xz-dev xz-static libevent-dev libevent-static >/dev/null
+  tar perl libxml2-dev libxml2-static zlib-dev zlib-static xz-dev xz-static libevent-dev libevent-static >/dev/null
 
 JOBS=$(nproc)
 WORK=/tmp/build-linux-$goarch
-rm -rf "$WORK"; mkdir -p "$WORK"
+DEPS=$WORK/deps
+rm -rf "$WORK"; mkdir -p "$WORK" "$DEPS"
 export PKG_CONFIG="pkg-config --static" LDFLAGS="-static"
+
+# OpenSSL from source, like macOS: Alpine's package keeps the legacy
+# provider (MD4, which sstpc needs for MS-CHAPv2) in a separate .so that a
+# static binary can't load. no-module builds it into libcrypto.
+log "OpenSSL $OPENSSL_VERSION ($goarch)"
+tar -C "$WORK" -xzf "$(fetch "$OPENSSL_URL" "$OPENSSL_SHA256" "openssl-$OPENSSL_VERSION.tar.gz")"
+(
+  cd "$WORK/openssl-$OPENSSL_VERSION"
+  ./Configure "linux-$(uname -m)" no-shared no-module no-tests no-docs no-apps no-autoload-config \
+    --prefix="$DEPS" --libdir=lib --openssldir=/etc/ssl >/dev/null
+  make -j"$JOBS" >/dev/null
+  make install_sw >/dev/null
+)
+export PKG_CONFIG_PATH="$DEPS/lib/pkgconfig" CPPFLAGS="-I$DEPS/include"
+export LIBRARY_PATH="$DEPS/lib"
 
 log "openconnect $OPENCONNECT_VERSION ($goarch)"
 tar -C "$WORK" -xzf "$(fetch "$OPENCONNECT_URL" "$OPENCONNECT_SHA256" "openconnect-$OPENCONNECT_VERSION.tar.gz")"
@@ -56,13 +72,12 @@ apply_patches "$SST" "$ROOT/patches/sstp-client"
 (
   cd "$SST"
   ./configure --prefix=/opt/ingress-sstpc --disable-shared --enable-static --disable-ppp-plugin \
-    --with-runtime-dir=/var/run/sstpc >/dev/null
+    --with-runtime-dir=/var/run/sstpc --with-openssl="$DEPS" >/dev/null
   # configure puts -levent into LDFLAGS, which -all-static replaces here.
   make -j"$JOBS" LDFLAGS="-all-static" LIBS="-lutil -levent -lssl -lcrypto" >/dev/null
 )
 
-ossl=$(apk info -e openssl-libs-static >/dev/null && apk list -I openssl-libs-static 2>/dev/null | head -1 | cut -d' ' -f1)
-TLS_SOURCE="OpenSSL (static) from Alpine package $ossl, image $ALPINE_IMAGE"
+TLS_SOURCE="OpenSSL $OPENSSL_VERSION (static, built in)  $OPENSSL_URL  sha256:$OPENSSL_SHA256"
 
 check_binary() {
   file "$1" | grep -q 'statically linked' || die "$1 is not statically linked: $(file "$1")"
@@ -70,8 +85,7 @@ check_binary() {
 
 stage_common() { # STAGE TOOL
   mkdir -p "$1/bin" "$1/LICENSES"
-  cp /usr/share/licenses/openssl*/LICENSE* "$1/LICENSES/OpenSSL-Apache-2.0.txt" 2>/dev/null \
-    || curl -fsSL -o "$1/LICENSES/OpenSSL-Apache-2.0.txt" https://www.apache.org/licenses/LICENSE-2.0.txt
+  cp "$WORK/openssl-$OPENSSL_VERSION/LICENSE.txt" "$1/LICENSES/OpenSSL-Apache-2.0.txt"
   write_sources "$1/SOURCES.txt" "$2"
 }
 

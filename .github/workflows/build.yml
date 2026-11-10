@@ -34,6 +34,7 @@ jobs:
             mkdir -p "smoke/$t" && tar -C "smoke/$t" -xzf dist/$t-*-darwin-$goarch.tar.gz
             $run "smoke/$t/bin/$t" --version
           done
+          $run ./tests/sstpc-init.sh smoke/sstpc/bin/sstpc
       - uses: actions/upload-artifact@v4
         with:
           name: dist-darwin-${{ matrix.arch }}
@@ -48,6 +49,10 @@ jobs:
         run: ./scripts/build-linux-docker.sh amd64
       - name: Test against strict fake GlobalProtect server
         run: ./tests/run-fake-gp-docker.sh amd64
+      - name: sstpc initializes OpenSSL without the build tree
+        run: |
+          mkdir -p smoke && tar -C smoke -xzf dist/sstpc-*-linux-amd64.tar.gz
+          ./tests/sstpc-init.sh smoke/bin/sstpc
       - uses: actions/upload-artifact@v4
         with:
           name: dist-linux-amd64

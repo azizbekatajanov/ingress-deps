@@ -34,7 +34,7 @@ LICENSES/                (licenses of everything inside)
 SOURCES.txt              (exact sources, patches and ingress-deps commit)
 ```
 
-On macOS only system libraries are linked dynamically (libxml2, zlib, libiconv). OpenSSL 3.5 LTS is linked statically, and the binaries are ad-hoc signed. On Linux the binaries are fully static against Alpine's static OpenSSL, libxml2 and zlib. openfortivpn uses the system `pppd` (`/usr/sbin/pppd`; package `ppp` on Linux).
+On macOS only system libraries are linked dynamically (libxml2, zlib, libiconv). OpenSSL 3.5 LTS is linked statically with its providers built in (`no-module`: sstpc needs the legacy provider's MD4 for MS-CHAPv2, and a loadable module would be looked for in the build directory), and the binaries are ad-hoc signed. On Linux the binaries are fully static: OpenSSL 3.5 built from source (as on macOS), libxml2, zlib and libevent from Alpine. openfortivpn uses the system `pppd` (`/usr/sbin/pppd`; package `ppp` on Linux).
 
 ## Building locally
 

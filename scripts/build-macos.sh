@@ -39,7 +39,10 @@ tar -C "$WORK" -xzf "$(fetch "$OPENSSL_URL" "$OPENSSL_SHA256" "openssl-$OPENSSL_
   # build directory and no public CA verifies at all.
   # no-autoload-config: never read an openssl.cnf — these binaries run as
   # root, and macOS' /etc/ssl/openssl.cnf is LibreSSL's anyway.
-  CC=clang ./Configure "$ossl_target" no-shared no-tests no-docs no-apps no-autoload-config \
+  # no-module: providers (legacy too: sstpc needs its MD4 for MS-CHAPv2)
+  # are built into libcrypto; a loadable module would be looked for in this
+  # build directory, which doesn't exist on users' machines.
+  CC=clang ./Configure "$ossl_target" no-shared no-module no-tests no-docs no-apps no-autoload-config \
     --prefix="$DEPS" --openssldir=/etc/ssl --libdir=lib \
     -isysroot "$SDK" -mmacosx-version-min="$MACOSX_DEPLOYMENT_TARGET" >/dev/null
   make -j"$JOBS" >/dev/null
