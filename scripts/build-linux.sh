@@ -15,7 +15,7 @@ esac
 
 log "apk packages"
 apk add --no-cache bash build-base autoconf automake libtool pkgconf linux-headers curl patch file \
-  tar openssl-dev openssl-libs-static libxml2-dev libxml2-static zlib-dev zlib-static xz-dev xz-static >/dev/null
+  tar openssl-dev openssl-libs-static libxml2-dev libxml2-static zlib-dev zlib-static xz-dev xz-static libevent-dev libevent-static >/dev/null
 
 JOBS=$(nproc)
 WORK=/tmp/build-linux-$goarch
@@ -49,6 +49,18 @@ OFV=$WORK/openfortivpn-$OPENFORTIVPN_VERSION
   make -j"$JOBS" >/dev/null
 )
 
+log "sstp-client $SSTP_CLIENT_VERSION ($goarch)"
+tar -C "$WORK" -xzf "$(fetch "$SSTP_CLIENT_URL" "$SSTP_CLIENT_SHA256" "sstp-client-$SSTP_CLIENT_VERSION.tar.gz")"
+SST=$WORK/sstp-client-$SSTP_CLIENT_VERSION
+apply_patches "$SST" "$ROOT/patches/sstp-client"
+(
+  cd "$SST"
+  ./configure --prefix=/opt/ingress-sstpc --disable-shared --enable-static --disable-ppp-plugin \
+    --with-runtime-dir=/var/run/sstpc >/dev/null
+  # configure puts -levent into LDFLAGS, which -all-static replaces here.
+  make -j"$JOBS" LDFLAGS="-all-static" LIBS="-lutil -levent -lssl -lcrypto" >/dev/null
+)
+
 ossl=$(apk info -e openssl-libs-static >/dev/null && apk list -I openssl-libs-static 2>/dev/null | head -1 | cut -d' ' -f1)
 TLS_SOURCE="OpenSSL (static) from Alpine package $ossl, image $ALPINE_IMAGE"
 
@@ -78,7 +90,15 @@ install -m 0755 "$OFV/openfortivpn" "$OFS/bin/openfortivpn"
 cp "$OFV/LICENSE" "$OFS/LICENSES/openfortivpn-GPL-3.0.txt"
 cp "$OFV/LICENSE.OpenSSL" "$OFS/LICENSES/openfortivpn-OpenSSL-exception.txt"
 
-for b in "$OCS/bin/openconnect" "$OFS/bin/openfortivpn"; do
+SSS=$WORK/stage-sstpc
+EVENT_SOURCE="libevent (static) from Alpine package $(apk list -I libevent-static 2>/dev/null | head -1 | cut -d' ' -f1), image $ALPINE_IMAGE"
+stage_common "$SSS" sstpc
+install -m 0755 "$SST/src/sstpc" "$SSS/bin/sstpc"
+cp "$SST/COPYING" "$SSS/LICENSES/sstp-client-GPL-2.0.txt"
+cp /usr/share/licenses/libevent*/LICENSE "$SSS/LICENSES/libevent-BSD-3-Clause.txt" 2>/dev/null \
+  || curl -fsSL -o "$SSS/LICENSES/libevent-BSD-3-Clause.txt" "https://raw.githubusercontent.com/libevent/libevent/release-$LIBEVENT_VERSION-stable/LICENSE"
+
+for b in "$OCS/bin/openconnect" "$OFS/bin/openfortivpn" "$SSS/bin/sstpc"; do
   strip "$b"
   check_binary "$b"
   "$b" --version 2>&1 | head -2
@@ -86,3 +106,4 @@ done
 
 "$ROOT/scripts/package.sh" openconnect "$(oc_version)" linux "$goarch" "$OCS"
 "$ROOT/scripts/package.sh" openfortivpn "$(ofv_version)" linux "$goarch" "$OFS"
+"$ROOT/scripts/package.sh" sstpc "$(sstpc_version)" linux "$goarch" "$SSS"

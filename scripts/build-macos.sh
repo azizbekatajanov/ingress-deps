@@ -77,6 +77,29 @@ OFV=$WORK/openfortivpn-$OPENFORTIVPN_VERSION
   make -j"$JOBS" >/dev/null
 )
 
+# --- libevent (static) + sstp-client ------------------------------------------
+log "libevent $LIBEVENT_VERSION ($arch)"
+tar -C "$WORK" -xzf "$(fetch "$LIBEVENT_URL" "$LIBEVENT_SHA256" "libevent-$LIBEVENT_VERSION-stable.tar.gz")"
+(
+  cd "$WORK/libevent-$LIBEVENT_VERSION-stable"
+  ./configure --host="$host" --prefix="$DEPS" --disable-shared --enable-static \
+    --disable-openssl --disable-samples --disable-libevent-regress --disable-debug-mode >/dev/null
+  make -j"$JOBS" >/dev/null
+  make install >/dev/null
+)
+
+log "sstp-client $SSTP_CLIENT_VERSION ($arch)"
+tar -C "$WORK" -xzf "$(fetch "$SSTP_CLIENT_URL" "$SSTP_CLIENT_SHA256" "sstp-client-$SSTP_CLIENT_VERSION.tar.gz")"
+SST=$WORK/sstp-client-$SSTP_CLIENT_VERSION
+apply_patches "$SST" "$ROOT/patches/sstp-client"
+(
+  cd "$SST"
+  ./configure --host="$host" --prefix=/opt/ingress-sstpc \
+    --disable-shared --enable-static --disable-ppp-plugin \
+    --with-runtime-dir=/var/run/sstpc --with-openssl="$DEPS" >/dev/null
+  make -j"$JOBS" >/dev/null
+)
+
 # --- checks + package --------------------------------------------------------
 TLS_SOURCE="OpenSSL $OPENSSL_VERSION (static)  $OPENSSL_URL  sha256:$OPENSSL_SHA256"
 check_binary() {
@@ -108,7 +131,14 @@ cp "$OFV/openfortivpn" "$OFS/bin/openfortivpn"
 cp "$OFV/LICENSE" "$OFS/LICENSES/openfortivpn-GPL-3.0.txt"
 cp "$OFV/LICENSE.OpenSSL" "$OFS/LICENSES/openfortivpn-OpenSSL-exception.txt"
 
-for b in "$OCS/bin/openconnect" "$OFS/bin/openfortivpn"; do
+SSS=$WORK/stage-sstpc
+EVENT_SOURCE="libevent $LIBEVENT_VERSION (static)  $LIBEVENT_URL  sha256:$LIBEVENT_SHA256"
+stage_common "$SSS" sstpc
+cp "$SST/src/sstpc" "$SSS/bin/sstpc"
+cp "$SST/COPYING" "$SSS/LICENSES/sstp-client-GPL-2.0.txt"
+cp "$WORK/libevent-$LIBEVENT_VERSION-stable/LICENSE" "$SSS/LICENSES/libevent-BSD-3-Clause.txt"
+
+for b in "$OCS/bin/openconnect" "$OFS/bin/openfortivpn" "$SSS/bin/sstpc"; do
   strip -x "$b"
   codesign --force --sign - "$b"   # ad-hoc: required to run on Apple Silicon
   check_binary "$b"
@@ -116,3 +146,4 @@ done
 
 "$ROOT/scripts/package.sh" openconnect "$(oc_version)" darwin "$goarch" "$OCS"
 "$ROOT/scripts/package.sh" openfortivpn "$(ofv_version)" darwin "$goarch" "$OFS"
+"$ROOT/scripts/package.sh" sstpc "$(sstpc_version)" darwin "$goarch" "$SSS"

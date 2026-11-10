@@ -55,3 +55,4 @@ apply_patches() { # DIR PATCHDIR
 
 oc_version()  { echo "$OPENCONNECT_VERSION-ingress.$INGRESS_REV"; }
 ofv_version() { echo "$OPENFORTIVPN_VERSION-ingress.$INGRESS_REV"; }
+sstpc_version() { echo "$SSTP_CLIENT_VERSION-ingress.$INGRESS_REV"; }

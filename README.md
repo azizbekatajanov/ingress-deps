@@ -6,6 +6,7 @@ Reproducible builds of the VPN clients that [Ingress](https://github.com/azizbek
 |---|---|---|
 | [openconnect](https://www.infradead.org/openconnect/) | 9.21 + [`patches/openconnect`](patches/openconnect) | GlobalProtect |
 | [openfortivpn](https://github.com/adrienverge/openfortivpn) | 1.20.5 (1.21+ is broken on macOS Sonoma+, [#1165](https://github.com/adrienverge/openfortivpn/issues/1165)) | Fortinet SSL-VPN |
+| [sstp-client](https://gitlab.com/sstp-project/sstp-client) (`sstpc`) | 1.0.20 + [`patches/sstp-client`](patches/sstp-client) | Microsoft SSTP |
 
 Targets: macOS arm64 and x86_64 (12.0+), Linux amd64 (fully static, musl).
 
@@ -17,6 +18,9 @@ Every input is pinned by version and sha256 in [`versions.env`](versions.env).
 
   **When upstream merges it:** bump `OPENCONNECT_*` to the release that contains it, delete the patch, bump `INGRESS_REV`.
 - `0002-OpenSSL-allow-connecting-to-servers-without-secure-r.patch`: OpenSSL 3 refuses to connect to servers that don't support RFC 5746 secure renegotiation ("unsafe legacy renegotiation disabled"), and some GlobalProtect gateways (older PAN-OS) are such servers. The patch sets `SSL_OP_LEGACY_SERVER_CONNECT`, as OpenSSL 1.1 and GnuTLS builds behave. Unsafe renegotiation itself stays refused, and ciphers and the security level are unchanged. Without it, the only way in was `--allow-insecure-crypto`, which also enables 3DES/RC4 and security level 0.
+
+- `sstp-client/0001-Read-the-password-from-stdin-with-password.patch`: without the pppd plugin (which isn't built: macOS has no pppd headers) sstpc takes the password only as `--password <pw>`, visible to every local user in the process list. `--password -` reads it from stdin instead.
+- `sstp-client/0002-Don-t-overflow-the-pppd-argument-vector.patch`: the pppd command line was built in a fixed 20-entry array without a bounds check, so about a dozen pppd options overflowed it.
 
 ## Artifacts
 

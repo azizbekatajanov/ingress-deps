@@ -1,0 +1,43 @@
+From 1f5e648bece6c993a7120dee5206138ea3daf215 Mon Sep 17 00:00:00 2001
+From: Azizbek Atajanov <33376229+azizbekatajanov@users.noreply.github.com>
+Date: Tue, 10 Nov 2026 14:09:06 +0500
+Subject: [PATCH 2/2] Don't overflow the pppd argument vector
+
+The pppd command line was built in a fixed args[20] without a bounds
+check: with user, password file and the plugin arguments in it, about
+a dozen pppd options after -- wrote past the end of the stack array.
+Make room for 64 entries and refuse more instead of overflowing.
+---
+ src/sstp-pppd.c | 9 ++++++++-
+ 1 file changed, 8 insertions(+), 1 deletion(-)
+
+diff --git a/src/sstp-pppd.c b/src/sstp-pppd.c
+index b69b2ea..fcfeb0a 100644
+--- a/src/sstp-pppd.c
++++ b/src/sstp-pppd.c
+@@ -509,7 +509,9 @@ status_t sstp_pppd_start(sstp_pppd_st *ctx, sstp_option_st *opts,
+     /* Launch PPPd, unless PPPd launched us */
+     if (!(SSTP_OPT_NOLAUNCH & opts->enable))
+     {
+-        const char *args[20];
++        /* pppd, tty, speed, user x2, file x2, plugin x4, then the
++         * user's pppd options, then NULL */
++        const char *args[64];
+         int i = 0;
+         int j = 0;
+         char speed[10];
+@@ -586,6 +588,11 @@ status_t sstp_pppd_start(sstp_pppd_st *ctx, sstp_option_st *opts,
+         }
+ 
+         /* Copy all the arguments to pppd */
++        if (opts->pppdargc > (int)(sizeof(args) / sizeof(args[0])) - i - 1)
++        {
++            log_err("Too many pppd options");
++            goto done;
++        }
+         for (j = 0; j < opts->pppdargc; j++)
+         {
+             args[i++] = opts->pppdargv[j];
+-- 
+2.54.0 (Apple Git-157)
+
